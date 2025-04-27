@@ -1,0 +1,4 @@
+venv
+.env
+uploaded_documents
+chroma_langchain_db
