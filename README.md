@@ -126,16 +126,6 @@ README.md            # Project documentation
 
 ---
 
-## Improvements Planned
-
-- Add authentication and user management
-- Support multiple collections
-- Stream responses for long answers
-- WebSocket support for real-time updates
-- Docker setup for production deployment
-
----
-
 ## Acknowledgements
 
 - [FastAPI](https://fastapi.tiangolo.com/)
