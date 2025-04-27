@@ -1,6 +1,6 @@
 import aiofiles
 from fastapi import FastAPI, UploadFile, File, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel
 import uvicorn
 import os
@@ -15,9 +15,21 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate
 from langchain_openai import OpenAI
 from langchain_core.runnables import RunnablePassthrough
+from fastapi.middleware.cors import CORSMiddleware
+from langchain_openai import ChatOpenAI
 
 load_dotenv()
 app = FastAPI()
+
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods
+    allow_headers=["*"],  # Allows all headers
+)
+
 UPLOAD_DIR = "uploaded_documents"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 PERSIST_DIR = "./chroma_langchain_db"
@@ -26,6 +38,10 @@ PERSIST_DIR = "./chroma_langchain_db"
 class QueryRequest(BaseModel):
     filename: str
     question: str
+
+
+class PreviewRequest(BaseModel):
+    filename: str
 
 
 @app.post("/upload")
@@ -107,7 +123,12 @@ async def query_document(request: QueryRequest):
         persist_directory="./chroma_langchain_db",
     )
 
-    retriever = vector_store.as_retriever(search_kwargs={"k": 10},filter={"source": request.filename})
+    retriever = vector_store.as_retriever(
+        search_kwargs={
+            "k": 5,
+            "filter": {"source": {"$eq": request.filename}}
+        }
+    )
 
     prompt_template = """You are a helpful assistant that answers questions based on the provided context. 
     If you don't know the answer, just say that you don't know. Don't try to make up an answer.
@@ -121,7 +142,7 @@ async def query_document(request: QueryRequest):
         input_variables=["context", "question"],
         template=prompt_template,
     )
-    llm = OpenAI(model="gpt-3.5-turbo-instruct",temperature=0)
+    llm = ChatOpenAI(model="gpt-4o",temperature=0)
     
     chain = (
         {
@@ -136,6 +157,22 @@ async def query_document(request: QueryRequest):
     answer = chain.invoke(request.question)
 
     return {"answer": answer}
+
+
+@app.get("/preview/{filename}")
+async def preview_document(filename: str):
+    file_path = os.path.join(UPLOAD_DIR, filename)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="File not found")
+    headers = {
+        "Content-Disposition": f'inline; filename="{filename}"'
+    }
+    return FileResponse(
+        path=file_path,
+        media_type="application/pdf",
+        filename=filename,
+        headers=headers
+    )
 
 
 if __name__ == "__main__":
